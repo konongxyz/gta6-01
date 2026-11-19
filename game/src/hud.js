@@ -8,6 +8,7 @@ import { WORLD, TUNING, CONTROLS_TEXT } from './config.js';
 import { formatClock, formatMoney, clamp } from './random.js';
 import { PLACES } from './world.js';
 import { policeUnits } from './police.js';
+import { STORY } from './missions.js';
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 
@@ -51,7 +52,7 @@ export function drawHUD(ctx, game) {
   ctx.fillText(formatClock(game.clockMinutes), W - 20, 68);
   ctx.fillStyle = '#9fb4c0';
   ctx.font = `11px ${FONT}`;
-  ctx.fillText(game.missions.storyDone ? 'Port Solano is yours' : `Story: job ${Math.min(game.missions.index + 1, 5)} of 5`, W - 20, 86);
+  ctx.fillText(game.missions.storyDone ? 'Port Solano is yours' : `Story: job ${Math.min(game.missions.index + 1, STORY.length)} of ${STORY.length}`, W - 20, 86);
   ctx.textAlign = 'left';
 
   // The bust meter, when the law has hands nearly on her.
@@ -356,7 +357,7 @@ export function drawTitle(ctx, game) {
     CONTROLS_TEXT.forEach((line, i) => {
       ctx.fillText(line, W / 2, by + 92 + i * 24);
     });
-    ctx.fillText('Do jobs for Dex and Tito, bank cash, and finish all five story jobs to take the city.', W / 2, by + 92 + CONTROLS_TEXT.length * 24 + 8);
+    ctx.fillText('Do jobs for Dex and Tito, bank cash, and finish all seven story jobs to take the city.', W / 2, by + 92 + CONTROLS_TEXT.length * 24 + 8);
   }
   ctx.font = `12px ${FONT}`;
   ctx.fillStyle = 'rgba(244,234,210,0.65)';
@@ -428,7 +429,7 @@ export function drawEndScreen(ctx, game, kind) {
   }
   ctx.font = `15px ${FONT}`;
   ctx.fillStyle = '#cfe0c0';
-  ctx.fillText(`Jobs ${s.missionsDone}/5 · Fares ${s.faresDone} · Cars stolen ${s.carsStolen} · Distance driven ${Math.round(s.distanceDriven / 52)}m · Packages ${s.packagesFound}/12`, W / 2, H * 0.56);
+  ctx.fillText(`Jobs ${s.missionsDone}/${STORY.length} · Fares ${s.faresDone} · Cars stolen ${s.carsStolen} · Distance driven ${Math.round(s.distanceDriven / 52)}m · Packages ${s.packagesFound}/12`, W / 2, H * 0.56);
   drawButton(ctx, game, 'again', W / 2 - 125, H * 0.64, 250, 48, kind === 'complete' ? 'KEEP ROAMING' : 'CONTINUE', true);
   ctx.textAlign = 'left';
 }

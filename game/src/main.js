@@ -11,7 +11,7 @@ import { buildWorld, slideMove, PLACES } from './world.js';
 import { createPlayer, spawnPeds, updatePed, recyclePeds } from './people.js';
 import { createPoliceSystem, nearestPoliceDistance } from './police.js';
 import { createCombat } from './combat.js';
-import { createMissionSystem } from './missions.js';
+import { createMissionSystem, STORY } from './missions.js';
 import { collideCars, collideCarsWithPeople, spawnTraffic, speedOf, stepCar, trafficInput } from './vehicles.js';
 import { drawScene } from './render.js';
 import { drawEndScreen, drawHUD, drawPause, drawTitle } from './hud.js';
@@ -148,9 +148,9 @@ function initRun(save) {
     game.player.health = clamp(save.health ?? 100, 20, 100);
     game.player.x = save.x ?? PLACES.start.x;
     game.player.y = save.y ?? PLACES.start.y;
-    game.missions.index = clamp(save.missionIndex ?? 0, 0, 5);
+    game.missions.index = clamp(save.missionIndex ?? 0, 0, STORY.length);
     game.missions.storyDone = !!save.storyDone;
-    if (game.missions.index >= 5) game.missions.storyDone = true;
+    if (game.missions.index >= STORY.length) game.missions.storyDone = true;
     game.stats = { ...freshStats(), ...(save.stats ?? {}) };
     for (const pack of game.world.packages) {
       if ((save.packages ?? []).includes(pack.id)) pack.taken = true;

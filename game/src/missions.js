@@ -1,4 +1,4 @@
-// missions.js — the story of Mari Voss in five jobs, plus the repeatable work that
+// missions.js — the story of Mari Voss in seven jobs, plus the repeatable work that
 // keeps her fed between them: taxi-style courier fares, hidden cash packages and
 // dropped pickups. A mission is a list of steps (reach a place, take a car, carry
 // a passenger, beat a clock, outrun a locked wanted level); this file runs the
@@ -13,7 +13,7 @@ import { sfx } from './audio.js';
 import { storeSave } from './save.js';
 
 export const MISSION_STARTS = [
-  PLACES.start, PLACES.garage, PLACES.boardwalk, PLACES.docks, PLACES.warehouse,
+  PLACES.start, PLACES.garage, PLACES.boardwalk, PLACES.docks, PLACES.marina, PLACES.hotelLot, PLACES.warehouse,
 ];
 
 export const STORY = [
@@ -90,6 +90,46 @@ export const STORY = [
     reward: 800,
     outro: [
       ['Dex', 'Three for three, and the crates are already forgotten. You are becoming expensive, Mari.'],
+    ],
+  },
+  {
+    title: 'Cash and Carry',
+    giver: 'Dex Marlowe',
+    intro: [
+      ['Dex', 'A buyer just touched down at the airfield with a briefcase and no patience. He wants a clean car at the hangar, cash on delivery, no questions.'],
+      ['Mari', 'Let me guess — the cash does not walk itself back across town.'],
+      ['Dex', 'It does not. Once he pays, you run that money straight to the downtown alley. Word gets out fast in Solano, Mari.'],
+      ['Mari', 'Word gets out, and the law starts listening.'],
+      ['Dex', 'Exactly. So be faster than the word. Clock starts when you roll.'],
+    ],
+    steps: [
+      { type: 'getcar', label: 'Get into a car' },
+      { type: 'goto', place: 'airfield', label: 'Deliver the car to the airfield hangar', timer: 300 },
+      { type: 'goto', point: { x: 1750, y: 1290 }, label: 'Run the cash to the downtown alley', heat: 18 },
+    ],
+    reward: 950,
+    outro: [
+      ['Dex', 'Cash counted, buyer vanished. That is how quiet money moves in this town.'],
+    ],
+  },
+  {
+    title: 'The Whistleblower',
+    giver: 'Odette Marchand',
+    intro: [
+      ['Odette', 'You are Dex\'s driver? I am Odette Marchand, concierge at the Azahar Hotel. My sister keeps the Castellano crews\' books — and she wants out, tonight.'],
+      ['Mari', 'And I am the door she walks through.'],
+      ['Odette', 'She knows names, dates, payments. If she talks, half this city burns. But someone inside Dex\'s own crew is already talking — that is how the Castellanos found her.'],
+      ['Mari', 'Someone close to Dex is leaking? That would explain a lot of the heat lately.'],
+      ['Odette', 'Please, get her to Tito\'s garage and do not stop for anyone. She is all I have.'],
+    ],
+    steps: [
+      { type: 'pickup', place: 'hotelLot', label: 'Pick up the whistleblower at the Azahar Hotel (bring a car)' },
+      { type: 'escape', place: 'garage', heat: 3, label: "Get her to Tito's garage — do not stop" },
+    ],
+    reward: 1200,
+    outro: [
+      ['Odette', 'She is safe — thank you. Whatever comes next, Mari, watch who stands close to Dex.'],
+      ['Mari', 'I will. Get some sleep, Odette.'],
     ],
   },
   {
