@@ -49,6 +49,7 @@ export function drawScene(ctx, game) {
   }
   if (!game.player.car) drawPlayer(ctx, game);
   drawEffects(ctx, game);
+  drawHelicopter(ctx, game);
   ctx.restore();
 
   drawLighting(ctx, game);
@@ -499,6 +500,61 @@ function drawEffects(ctx, game) {
   }
 }
 
+function drawHelicopter(ctx, game) {
+  const heli = game.police.heli;
+  if (!heli) return;
+  // Searchlight pool on the ground, brighter after dark.
+  const poolAlpha = 0.10 + darknessAt(game.clockMinutes) * 0.35;
+  const pool = ctx.createRadialGradient(heli.x, heli.y, 2, heli.x, heli.y, 120);
+  pool.addColorStop(0, `rgba(255,246,200,${poolAlpha})`);
+  pool.addColorStop(1, 'rgba(255,246,200,0)');
+  ctx.fillStyle = pool;
+  ctx.beginPath();
+  ctx.arc(heli.x, heli.y, 120, 0, Math.PI * 2);
+  ctx.fill();
+  // Ground shadow, offset from the machine itself.
+  ctx.fillStyle = 'rgba(30,22,10,0.30)';
+  ctx.beginPath();
+  ctx.ellipse(heli.x + 16, heli.y + 18, 48, 17, heli.angle, 0, Math.PI * 2);
+  ctx.fill();
+  // The airframe, hovering up and to the left of its ground point.
+  ctx.save();
+  ctx.translate(heli.x - 36, heli.y - 44);
+  ctx.rotate(heli.angle);
+  ctx.fillStyle = '#d7dde3';
+  ctx.fillRect(-56, -3.5, 38, 7);
+  ctx.fillStyle = '#eef1f4';
+  roundRect(ctx, -22, -13, 46, 26, 10);
+  ctx.fill();
+  ctx.fillStyle = '#1d2733';
+  roundRect(ctx, 8, -13, 16, 26, 8);
+  ctx.fill();
+  ctx.fillStyle = '#1d2733';
+  ctx.fillRect(-58, -6, 5, 12);
+  ctx.strokeStyle = '#33383e';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(-16, -13);
+  ctx.lineTo(18, -13);
+  ctx.moveTo(-16, 13);
+  ctx.lineTo(18, 13);
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 9px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('SPD', 0, 3);
+  ctx.strokeStyle = 'rgba(20,20,20,0.55)';
+  ctx.lineWidth = 3;
+  const rotorAngle = game.time * 38;
+  ctx.beginPath();
+  ctx.moveTo(Math.cos(rotorAngle) * -42, Math.sin(rotorAngle) * -42);
+  ctx.lineTo(Math.cos(rotorAngle) * 42, Math.sin(rotorAngle) * 42);
+  ctx.moveTo(Math.cos(rotorAngle + Math.PI / 2) * -42, Math.sin(rotorAngle + Math.PI / 2) * -42);
+  ctx.lineTo(Math.cos(rotorAngle + Math.PI / 2) * 42, Math.sin(rotorAngle + Math.PI / 2) * 42);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawLighting(ctx, game) {
   const dark = darknessAt(game.clockMinutes);
   const { width, height } = ctx.canvas;
@@ -520,6 +576,19 @@ function drawLighting(ctx, game) {
       ctx.fillRect(sx - 60 * cam.zoom, sy - 60 * cam.zoom, 120 * cam.zoom, 120 * cam.zoom);
     }
     ctx.restore();
+    if (game.police.heli) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const heli = game.police.heli;
+      const sx = (heli.x - cam.x) * cam.zoom + width / 2;
+      const sy = (heli.y - cam.y) * cam.zoom + height / 2;
+      const grad = ctx.createRadialGradient(sx, sy, 2, sx, sy, 130 * cam.zoom);
+      grad.addColorStop(0, 'rgba(255,240,190,0.16)');
+      grad.addColorStop(1, 'rgba(255,240,190,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(sx - 130 * cam.zoom, sy - 130 * cam.zoom, 260 * cam.zoom, 260 * cam.zoom);
+      ctx.restore();
+    }
   }
   // A warm wash at golden hour.
   const h = game.clockMinutes / 60;

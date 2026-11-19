@@ -6,7 +6,7 @@
 
 import { TUNING, WORLD } from './config.js';
 import { clamp, distance } from './random.js';
-import { lineBlocked, slideMove } from './world.js';
+import { carHitsBuilding, isRoadPoint, lineBlocked, slideMove } from './world.js';
 import { createVehicle, forwardSpeed, speedOf, stepCar } from './vehicles.js';
 import { createPed } from './people.js';
 
@@ -32,6 +32,8 @@ export function createPoliceSystem() {
     bustMeter: 0,
     lockedStars: 0, // a mission can hold the heat at a floor (the finale)
     spawnTimer: 0,
+    roadblockTimer: 0,
+    heli: null,
 
     reportCrime(game, kind, x, y) {
       const gained = CRIME_POINTS[kind] ?? 8;
@@ -78,6 +80,8 @@ export function createPoliceSystem() {
       this.stars = 0;
       this.bustMeter = 0;
       this.unseenTimer = 0;
+      this.roadblockTimer = 0;
+      this.heli = null;
     },
 
     update(game, dt, rng) {
@@ -91,6 +95,7 @@ export function createPoliceSystem() {
           break;
         }
       }
+      if (!seen && this.heli && distance(this.heli.x, this.heli.y, focus.x, focus.y) < 640) seen = true;
       if (seen) this.unseenTimer = 0;
       else this.unseenTimer += dt;
       if (this.unseenTimer > TUNING.wantedDecaySeconds && this.points > 0 && this.lockedStars === 0) {
@@ -102,12 +107,14 @@ export function createPoliceSystem() {
       this.maintainUnits(game, dt, rng);
       this.updateUnits(game, dt, rng);
       this.updateBust(game, dt);
+      this.updateRoadblocks(game, dt, rng);
+      this.updateHelicopter(game, dt, rng);
     },
 
     maintainUnits(game, dt, rng) {
       this.spawnTimer -= dt;
       const wanted = TUNING.maxPoliceByStars[this.stars] ?? 0;
-      const cars = game.vehicles.filter((v) => v.kind === 'police');
+      const cars = game.vehicles.filter((v) => v.kind === 'police' && !v.roadblock);
       // Retire units that are far away when the heat is gone or low.
       for (const car of [...cars]) {
         const d = distance(car.x, car.y, game.player.x, game.player.y);
@@ -164,6 +171,14 @@ export function createPoliceSystem() {
             cop.x = car.x + Math.cos(car.angle + Math.PI / 2) * 30;
             cop.y = car.y + Math.sin(car.angle + Math.PI / 2) * 30;
             cop.state = 'chase';
+          }
+          continue;
+        }
+        if (car.roadblock) {
+          // A roadblock car holds its ground; its driver stays seated with it.
+          if (car.driver && car.driver !== 'player') {
+            car.driver.x = car.x;
+            car.driver.y = car.y;
           }
           continue;
         }
@@ -236,6 +251,139 @@ export function createPoliceSystem() {
         }
       } else {
         this.bustMeter = Math.max(0, this.bustMeter - dt * 0.55);
+      }
+    },
+
+    updateRoadblocks(game, dt, rng) {
+      this.roadblockTimer -= dt;
+      let blocks = game.vehicles.filter((v) => v.roadblock && !v.wrecked);
+      // If the player has taken a roadblock car, it stops being a roadblock.
+      blocks = blocks.filter((car) => {
+        if (car.driver === 'player') {
+          car.roadblock = false;
+          return false;
+        }
+        return true;
+      });
+      const removeBlock = (car) => {
+        const carAt = game.vehicles.indexOf(car);
+        if (carAt >= 0) game.vehicles.splice(carAt, 1);
+        if (car.driver && car.driver !== 'player') {
+          const pedAt = game.peds.indexOf(car.driver);
+          if (pedAt >= 0) game.peds.splice(pedAt, 1);
+        }
+      };
+      if (this.stars < 3) {
+        for (const car of [...blocks]) removeBlock(car);
+        return;
+      }
+      const player = game.player;
+      for (const car of [...blocks]) {
+        if (distance(car.x, car.y, player.x, player.y) > 1100) {
+          removeBlock(car);
+          blocks.splice(blocks.indexOf(car), 1);
+        }
+      }
+      if (blocks.length === 0 && player.car && this.roadblockTimer <= 0) {
+        this.roadblockTimer = this.spawnRoadblock(game, rng) ? 16 : 4;
+      }
+    },
+
+    spawnRoadblock(game, rng) {
+      const player = game.player;
+      if (!player.car) return false;
+      const heading = player.car.angle;
+      const ahead = {
+        x: player.x + Math.cos(heading) * 760,
+        y: player.y + Math.sin(heading) * 760,
+      };
+      let ncx = WORLD.roadCenters[0];
+      let ncy = WORLD.roadCenters[0];
+      for (const c of WORLD.roadCenters) {
+        if (Math.abs(c - ahead.x) < Math.abs(ncx - ahead.x)) ncx = c;
+        if (Math.abs(c - ahead.y) < Math.abs(ncy - ahead.y)) ncy = c;
+      }
+      let spots;
+      if (Math.abs(ahead.x - ncx) <= Math.abs(ahead.y - ncy)) {
+        spots = [
+          { x: ncx - 38, y: ahead.y },
+          { x: ncx + 38, y: ahead.y },
+        ];
+      } else {
+        spots = [
+          { x: ahead.x, y: ncy - 38 },
+          { x: ahead.x, y: ncy + 38 },
+        ];
+      }
+      const placed = spots.map((spot) => ({
+        x: spot.x,
+        y: spot.y,
+        angle: Math.atan2(player.y - spot.y, player.x - spot.x),
+      }));
+      // Validate both spots before spawning either one.
+      for (const spot of placed) {
+        if (!(spot.x > 80 && spot.x < WORLD.width - 80)) return false;
+        if (!(spot.y > 80 && spot.y < WORLD.height - 80)) return false;
+        if (!(spot.x < WORLD.beachX - 40)) return false;
+        if (!isRoadPoint(spot.x, spot.y)) return false;
+        if (carHitsBuilding(game.world, spot.x, spot.y, spot.angle, 38, 18)) return false;
+      }
+      for (const spot of placed) {
+        const car = createVehicle('police', spot.x, spot.y, spot.angle, 'police', rng);
+        car.roadblock = true;
+        const cop = createPed(spot.x, spot.y, rng, true);
+        cop.inCar = car;
+        cop.state = 'driver';
+        car.driver = cop;
+        game.peds.push(cop);
+        game.vehicles.push(car);
+      }
+      game.toast('Roadblock ahead!');
+      return true;
+    },
+
+    updateHelicopter(game, dt, rng) {
+      const player = game.player;
+      const focus = player.car ?? player;
+      if (this.stars >= 4) {
+        if (!this.heli) {
+          const a = rng() * Math.PI * 2;
+          this.heli = {
+            x: focus.x + Math.cos(a) * 980,
+            y: focus.y + Math.sin(a) * 980,
+            angle: a,
+            orbit: rng() * Math.PI * 2,
+          };
+          game.toast('SPD helicopter overhead — its light is on you');
+        }
+        const heli = this.heli;
+        heli.orbit += dt * 0.25;
+        const tx = focus.x + Math.cos(heli.orbit) * 120 + (focus.vx ?? 0) * 0.45;
+        const ty = focus.y + Math.sin(heli.orbit) * 120 + (focus.vy ?? 0) * 0.45;
+        const dx = tx - heli.x;
+        const dy = ty - heli.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0.001) {
+          const step = Math.min(dist, 430 * dt);
+          heli.x += (dx / dist) * step;
+          heli.y += (dy / dist) * step;
+          heli.angle = Math.atan2(dy, dx);
+        }
+      } else if (this.heli) {
+        const heli = this.heli;
+        const dx = -300 - heli.x;
+        const dy = -300 - heli.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0.001) {
+          const step = Math.min(dist, 470 * dt);
+          heli.x += (dx / dist) * step;
+          heli.y += (dy / dist) * step;
+          heli.angle = Math.atan2(dy, dx);
+        }
+        if (heli.x < 0 || heli.x > WORLD.width || heli.y < 0 || heli.y > WORLD.height
+          || distance(heli.x, heli.y, player.x, player.y) > 1500) {
+          this.heli = null;
+        }
       }
     },
   };
