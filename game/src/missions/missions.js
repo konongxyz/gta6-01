@@ -5,12 +5,14 @@
 // steps, the dialogue that frames them, the timers that can fail them, and the
 // objective marker the HUD points at.
 
-import { PLACES } from './world.js';
-import { distance } from './random.js';
-import { createVehicle } from './vehicles.js';
-import { createPed } from './people.js';
-import { sfx } from './audio.js';
-import { storeSave } from './save.js';
+import { PLACES } from '../world/world.js';
+import { distance } from '../core/random.js';
+import { createVehicle } from '../vehicles/vehicles.js';
+import { createPed } from '../people/people.js';
+import { sfx } from '../audio/audio.js';
+import { storeSave } from '../core/save.js';
+import { addAmmo, ammoDeal, grantWeapon } from '../systems/weapons.js';
+import { addRep } from '../systems/reputation.js';
 
 export const MISSION_STARTS = [
   PLACES.start, PLACES.garage, PLACES.boardwalk, PLACES.docks, PLACES.marina, PLACES.hotelLot, PLACES.warehouse,
@@ -253,9 +255,10 @@ export function createMissionSystem() {
       game.police.lockedStars = 0;
       game.player.cash += def.reward;
       game.stats.missionsDone += 1;
+      addRep(game, 30 + Math.round(def.reward / 20));
       if (def.title === 'Borrowed Horsepower') {
-        game.player.hasPistol = true;
-        game.player.ammo += 24;
+        grantWeapon(game, 'pistol');
+        addAmmo(game, 'pistol', 24);
       }
       this.index += 1;
       if (this.index >= STORY.length) {
@@ -389,6 +392,7 @@ export function createMissionSystem() {
         const tip = Math.max(0, Math.round(((fare.par - fare.elapsed) / fare.par) * fare.fare * 0.6));
         player.cash += fare.fare + tip;
         game.stats.faresDone += 1;
+        addRep(game, 6);
         ped.inCar = null;
         ped.state = 'walk';
         ped.fareMark = false;
@@ -411,6 +415,7 @@ export function createMissionSystem() {
           pack.taken = true;
           player.cash += 50;
           game.stats.packagesFound += 1;
+          addRep(game, 3);
           sfx.cash();
           game.toast(`Hidden package — +$50 (${game.stats.packagesFound}/12)`);
           storeSave(game);
@@ -424,7 +429,7 @@ export function createMissionSystem() {
         }
         if (!player.car && distance(player.x, player.y, drop.x, drop.y) < 24) {
           if (drop.kind === 'ammo') {
-            player.ammo += drop.amount;
+            addAmmo(game, 'pistol', drop.amount);
             game.toast(`+${drop.amount} pistol rounds`);
           } else {
             player.health = Math.min(player.maxHealth, player.health + 35);
@@ -439,19 +444,24 @@ export function createMissionSystem() {
         && distance(player.x, player.y, PLACES.hospital.x, PLACES.hospital.y) < 60) {
         player.health = Math.min(player.maxHealth, player.health + dt * 22);
       }
-      // Anchor Arms sells rounds to a pistol owner standing at the counter.
-      if (!player.car && player.hasPistol && player.cash >= 40
+      // Anchor Arms sells ammunition to a gun owner standing at the counter —
+      // for the gun in her hands, priced by the pack (systems/weapons.js).
+      const deal = ammoDeal(game);
+      if (deal && !player.car && player.cash >= deal.price
         && distance(player.x, player.y, PLACES.gunStore.x, PLACES.gunStore.y) < 46
         && game.pressed.has('KeyE')) {
-        player.cash -= 40;
-        player.ammo += 18;
+        player.cash -= deal.price;
+        addAmmo(game, deal.type, deal.amount);
         sfx.cash();
-        game.toast('18 rounds — $40');
+        game.toast(`${deal.amount} ${deal.label} — $${deal.price}`);
       }
     },
 
     // What the HUD should point at right now, in priority order.
     objective(game) {
+      if (game.race && game.race.active) {
+        return { x: game.race.targetX, y: game.race.targetY, label: game.race.label, color: '#fd9644' };
+      }
       if (this.fare && this.fare.phase === 'drive') {
         return { x: this.fare.destX, y: this.fare.destY, label: 'Drop off your fare', color: '#58b368' };
       }

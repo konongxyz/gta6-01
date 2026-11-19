@@ -45,7 +45,7 @@ function noiseBuffer() {
 
 let sharedNoise = null;
 
-function burst({ duration = 0.15, frequency = 1200, type = 'lowpass', gain = 0.4, sweepTo = null }) {
+export function burst({ duration = 0.15, frequency = 1200, type = 'lowpass', gain = 0.4, sweepTo = null }) {
   if (!ctx) return;
   if (!sharedNoise) sharedNoise = noiseBuffer();
   const source = ctx.createBufferSource();
@@ -63,7 +63,7 @@ function burst({ duration = 0.15, frequency = 1200, type = 'lowpass', gain = 0.4
   source.stop(ctx.currentTime + duration + 0.02);
 }
 
-function tone({ frequency = 440, duration = 0.15, type = 'sine', gain = 0.25, sweepTo = null, delay = 0 }) {
+export function tone({ frequency = 440, duration = 0.15, type = 'sine', gain = 0.25, sweepTo = null, delay = 0 }) {
   if (!ctx) return;
   const start = ctx.currentTime + delay;
   const osc = ctx.createOscillator();

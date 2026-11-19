@@ -4,11 +4,11 @@
 // when somebody sees it — a cop in sight, or a bystander close enough to call it
 // in to a cop nearby.
 
-import { TUNING, WORLD } from './config.js';
-import { clamp, distance } from './random.js';
-import { carHitsBuilding, isRoadPoint, lineBlocked, slideMove } from './world.js';
-import { createVehicle, forwardSpeed, speedOf, stepCar } from './vehicles.js';
-import { createPed } from './people.js';
+import { TUNING, WORLD } from '../core/config.js';
+import { clamp, distance } from '../core/random.js';
+import { carHitsBuilding, isRoadPoint, lineBlocked, slideMove } from '../world/world.js';
+import { createVehicle, forwardSpeed, speedOf, stepCar } from '../vehicles/vehicles.js';
+import { createPed } from '../people/people.js';
 
 const CRIME_POINTS = {
   stealCar: 22,

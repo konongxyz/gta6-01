@@ -1,39 +1,51 @@
-// combat.js — fists and the pistol: the player's attacks (aimed with the mouse),
-// hitscan shots with tracers, the damage people and the player take, and officers
-// returning fire. Everything violent in the game is resolved here so the wanted
-// system hears about each act exactly once.
+// combat.js — Mari's arsenal at work: the player's attacks with whatever weapon
+// is in her hands (systems/weapons.js owns the stats), hitscan shots with
+// tracers, the damage people and the player take, and officers returning fire.
+// Everything violent in the game is resolved here so the wanted system hears
+// about each act exactly once.
 
-import { clamp, distance } from './random.js';
-import { buildingAt } from './world.js';
-import { damageCar } from './vehicles.js';
-import { sfx } from './audio.js';
+import { clamp, distance } from '../core/random.js';
+import { buildingAt } from '../world/world.js';
+import { damageCar } from '../vehicles/vehicles.js';
+import { sfx } from '../audio/audio.js';
+import { ammoOf, currentWeapon, ensureArsenal } from '../systems/weapons.js';
 
 const SHOT_RANGE = 560;
-const PUNCH_RANGE = 40;
-const PUNCH_DAMAGE = 34;
 
 export function createCombat() {
   return {
-    // The player swings or shoots toward the aim point (world coordinates).
+    // The player swings or shoots toward the aim point (world coordinates),
+    // with the weapon the wheel last put in her hands.
     playerAttack(game, aimX, aimY) {
       const player = game.player;
       if (player.car) return;
       player.angle = Math.atan2(aimY - player.y, aimX - player.x);
-      if (player.hasPistol && player.ammo > 0) {
+      const spec = currentWeapon(player);
+      if (spec.kind === 'gun') {
         if (player.fireTimer > 0) return;
-        player.fireTimer = 0.24;
-        player.ammo -= 1;
+        if (ammoOf(player, spec) <= 0) {
+          player.fireTimer = 0.3;
+          sfx.dryFire();
+          game.toast(`${spec.name} is empty — Q swaps weapon, Anchor Arms sells rounds`);
+          return;
+        }
+        player.fireTimer = spec.rate;
+        ensureArsenal(player).ammo[spec.ammoType] -= 1;
+        if (spec.ammoType === 'pistol') player.ammo = ensureArsenal(player).ammo.pistol;
         game.stats.shotsFired += 1;
         sfx.shot();
-        fireHitscan(game, player.x, player.y, player.angle, true);
+        for (let pellet = 0; pellet < spec.pellets; pellet += 1) {
+          const spreadAngle = player.angle + (game.rng() * 2 - 1) * spec.spread;
+          this.fireHitscan(game, player.x, player.y, spreadAngle, true, spec.damage, spec.range);
+        }
         game.police.reportCrime(game, 'shotFired', player.x, player.y);
       } else {
         if (player.punchTimer > 0) return;
-        player.punchTimer = 0.34;
+        player.punchTimer = spec.rate;
         sfx.swing();
-        // A punch lands on the nearest person inside the arc and the range.
+        // A swing lands on the nearest person inside the arc and the range.
         let best = null;
-        let bestDist = PUNCH_RANGE;
+        let bestDist = spec.range;
         for (const ped of game.peds) {
           if (ped.inCar || ped.state === 'down') continue;
           const d = distance(player.x, player.y, ped.x, ped.y);
@@ -45,35 +57,33 @@ export function createCombat() {
         }
         if (best) {
           sfx.punch();
-          this.damagePed(game, best, PUNCH_DAMAGE, true);
-          best.x += Math.cos(player.angle) * 10;
-          best.y += Math.sin(player.angle) * 10;
-        } else if (player.hasPistol && player.ammo <= 0) {
-          sfx.dryFire();
+          this.damagePed(game, best, spec.damage, true);
+          best.x += Math.cos(player.angle) * spec.knock;
+          best.y += Math.sin(player.angle) * spec.knock;
         }
       }
     },
 
     // One hitscan round from (x, y) along angle. People first, then cars, then the
     // wall that stops the tracer. byPlayer marks whose crime it is.
-    fireHitscan(game, x, y, angle, byPlayer) {
-      let endX = x + Math.cos(angle) * SHOT_RANGE;
-      let endY = y + Math.sin(angle) * SHOT_RANGE;
-      let hitDist = SHOT_RANGE;
+    fireHitscan(game, x, y, angle, byPlayer, damage = 34, range = SHOT_RANGE) {
+      let endX = x + Math.cos(angle) * range;
+      let endY = y + Math.sin(angle) * range;
+      let hitDist = range;
       let hitPed = null;
       let hitCar = null;
       for (const ped of game.peds) {
         if (ped.inCar || ped.state === 'down') continue;
-        const t = rayCircle(x, y, angle, ped.x, ped.y, 13);
+        const t = rayCircle(x, y, angle, ped.x, ped.y, 13, range);
         if (t !== null && t < hitDist) { hitDist = t; hitPed = ped; hitCar = null; }
       }
       if (!game.player.car && !byPlayer) {
-        const t = rayCircle(x, y, angle, game.player.x, game.player.y, 13);
+        const t = rayCircle(x, y, angle, game.player.x, game.player.y, 13, range);
         if (t !== null && t < hitDist) { hitDist = t; hitPed = null; hitCar = null; hitDist = t; endX = game.player.x; endY = game.player.y; }
       }
       for (const car of game.vehicles) {
         if (car.driver === 'player') continue;
-        const t = rayCircle(x, y, angle, car.x, car.y, car.spec.length * 0.46);
+        const t = rayCircle(x, y, angle, car.x, car.y, car.spec.length * 0.46, range);
         if (t !== null && t < hitDist) { hitDist = t; hitCar = car; hitPed = null; }
       }
       // Buildings stop the round early.
@@ -86,7 +96,7 @@ export function createCombat() {
       endY = y + Math.sin(angle) * hitDist;
       game.effects.push({ kind: 'tracer', x1: x, y1: y, x2: endX, y2: endY, ttl: 0.07, max: 0.07 });
       game.effects.push({ kind: 'spark', x: endX, y: endY, ttl: 0.16, max: 0.16 });
-      if (hitPed) this.damagePed(game, hitPed, 34, byPlayer);
+      if (hitPed) this.damagePed(game, hitPed, damage, byPlayer);
       else if (hitCar) {
         damageCar(game, hitCar, 9, 'shot');
         if (hitCar.driver && hitCar.driver !== 'player' && hitCar.kind !== 'police') {
@@ -167,11 +177,11 @@ export function createCombat() {
   };
 }
 
-function rayCircle(x, y, angle, cx, cy, radius) {
+function rayCircle(x, y, angle, cx, cy, radius, range = SHOT_RANGE) {
   const dx = cx - x;
   const dy = cy - y;
   const along = dx * Math.cos(angle) + dy * Math.sin(angle);
-  if (along < 0 || along > SHOT_RANGE) return null;
+  if (along < 0 || along > range) return null;
   const side = -dx * Math.sin(angle) + dy * Math.cos(angle);
   if (Math.abs(side) > radius) return null;
   return along;

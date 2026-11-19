@@ -12,7 +12,7 @@ let attachedCanvas = null;
 export function attachInput(canvas) {
   attachedCanvas = canvas;
   window.addEventListener('keydown', (event) => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(event.code)) {
       event.preventDefault();
     }
     if (!keys.has(event.code)) pressed.add(event.code);

@@ -1,17 +1,19 @@
-// shots.js — staged scenes for the entry's screenshots. The kit's own shots.json
-// pattern: open the game with ?shot=<name>&seed=<n> and it sets up a real, playable
-// scene from the game's own systems — the same cars, police, HUD and missions a
-// player gets — frozen at a photogenic moment. Nothing here draws anything itself;
-// it only places the pieces, and the normal loop renders them.
+// scenes.js (showcase/) — staged scenes for the entry's screenshots, plus the
+// playable Showcase state behind the title screen's SHOWCASE button. The kit's own
+// shots.json pattern: open the game with ?shot=<name>&seed=<n> and it sets up a
+// real, playable scene from the game's own systems — the same cars, police, HUD
+// and missions a player gets — frozen at a photogenic moment. Nothing here draws
+// anything itself; it only places the pieces, and the normal loop renders them.
 
-import { PLACES } from './world.js';
-import { createVehicle } from './vehicles.js';
-import { createPed } from './people.js';
-import { STORY } from './missions.js';
+import { PLACES } from '../world/world.js';
+import { createVehicle } from '../vehicles/vehicles.js';
+import { createPed } from '../people/people.js';
+import { STORY } from '../missions/missions.js';
 
 export function stageShot(game, name) {
   const rng = game.rng;
   game.state = 'play';
+  game.showcase = true;
   game.vehicles.length = 0;
   game.peds.length = 0;
   game.toasts.length = 0;
@@ -136,7 +138,103 @@ export function stageShot(game, name) {
     game.police.bustMeter = 0.42;
     player.cash = 1730;
     game.effects.push({ kind: 'smoke', x: car.x - 20, y: car.y - 10, ttl: 0.8, max: 0.8, rise: -16 });
+  } else if (name === 'showcase') {
+    buildShowcase(game, putCar, putPed, putCopCar);
   }
   game.camera.x = player.x;
   game.camera.y = player.y;
+}
+
+// The Showcase: the whole game in one playable moment — a tuned Aurelia GT at
+// dusk, four stars, the helicopter's light on the car, a roadblock ahead, every
+// weapon on the wheel, and a Shot Caller's name on the HUD. The title screen's
+// SHOWCASE button drops a player straight into this same live state.
+export function stageShowcase(game) {
+  const rng = game.rng;
+  game.state = 'play';
+  game.showcase = true;
+  game.vehicles.length = 0;
+  game.peds.length = 0;
+  game.toasts.length = 0;
+  const putCar = (type, x, y, angle, kind = 'traffic') => {
+    const car = createVehicle(type, x, y, angle, kind, rng);
+    game.vehicles.push(car);
+    return car;
+  };
+  const putPed = (x, y, isCop = false) => {
+    const ped = createPed(x, y, rng, isCop);
+    game.peds.push(ped);
+    return ped;
+  };
+  const putCopCar = (x, y, angle) => {
+    const car = putCar('police', x, y, angle, 'police');
+    const cop = putPed(x, y, true);
+    cop.inCar = car;
+    cop.state = 'driver';
+    car.driver = cop;
+    return car;
+  };
+  buildShowcase(game, putCar, putPed, putCopCar);
+  game.camera.x = game.player.x;
+  game.camera.y = game.player.y;
+}
+
+function buildShowcase(game, putCar, putPed, putCopCar) {
+  const player = game.player;
+  game.clockMinutes = 18 * 60 + 24;
+  // Mari at the top of her game: every weapon owned, the SMG in hand, a Shot
+  // Caller's respect and a wallet to match.
+  player.arsenal = {
+    current: 'smg',
+    owned: ['fists', 'pipe', 'pistol', 'smg', 'shotgun', 'rifle'],
+    ammo: { pistol: 36, smg: 120, shotgun: 20, rifle: 48 },
+  };
+  player.hasPistol = true;
+  player.ammo = 36;
+  player.rep = 560;
+  player.cash = 8640;
+  player.health = 100;
+  game.missions.index = STORY.length;
+  game.missions.storyDone = true;
+
+  // Her ride: a red Aurelia GT, Tito-tuned to stage 2 with stage 1 armour.
+  const car = putCar('sport', 1500, 1600, 0, 'traffic');
+  car.color = '#d94f3d';
+  car.tune = { engine: 2, armour: 1 };
+  player.car = car;
+  car.driver = 'player';
+  player.x = car.x;
+  player.y = car.y;
+  car.vx = 200;
+  car.vy = 0;
+
+  // Four stars of company: three Interceptors on her tail, the helicopter
+  // overhead, and a roadblock waiting up the avenue.
+  putCopCar(1300, 1552, 0.08);
+  putCopCar(1335, 1658, -0.1);
+  putCopCar(1740, 1470, 2.4);
+  game.police.points = 120;
+  game.police.refreshStars();
+  game.police.heli = { x: player.x - 120, y: player.y - 170, angle: 0.6, orbit: 2.1 };
+  game.police.spawnRoadblock(game, game.rng);
+  game.police.bustMeter = 0.25;
+
+  // A living street around her: traffic on both avenues, crowds on the walks.
+  putCar('sedan', 1980, 1560, 0);
+  putCar('taxi', 1150, 1650, Math.PI);
+  putCar('van', 2240, 1330, Math.PI / 2);
+  putCar('coupe', 2240, 1900, -Math.PI / 2);
+  putCar('truck', 960, 1560, 0);
+  putCar('hatch', 1700, 2240, 0);
+  putCar('sedan', 2560, 2240, Math.PI);
+  for (let i = 0; i < 8; i += 1) putPed(1420 + i * 52, 1476 + (i % 2) * 30);
+  for (let i = 0; i < 6; i += 1) {
+    const ped = putPed(1620 + i * 64, 1740 + (i % 2) * 44);
+    ped.state = 'flee';
+    ped.threatX = car.x;
+    ped.threatY = car.y;
+  }
+  // The wheel hangs open over the scene: the whole arsenal on show.
+  game.wheelOpen = true;
+  game.toast('Showcase — Port Solano at full heat');
 }

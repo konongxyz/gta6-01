@@ -71,7 +71,9 @@ export const TUNING = {
 
 export const CONTROLS_TEXT = [
   'W A S D / Arrows — move · drive',
-  'Shift — run · E — enter / exit car',
+  'Shift — run · E — enter / exit car · buy ammo',
   'Space — handbrake · F or Click — punch / shoot',
+  'Tab — weapon wheel · Q — swap weapon · B — buy weapon at Anchor Arms',
+  'R — radio (in a car) · G — Tito\'s garage / the Marina Mile race',
   'Mouse — aim · P or Esc — pause · M — mute',
 ];

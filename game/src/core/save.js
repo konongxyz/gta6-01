@@ -18,6 +18,8 @@ export function loadSave() {
 }
 
 export function storeSave(game) {
+  // A staged scene (screenshots, the Showcase) never overwrites a real run.
+  if (game.showcase) return false;
   try {
     const player = game.player;
     const data = {
@@ -26,6 +28,8 @@ export function storeSave(game) {
       storyDone: game.missions.storyDone,
       hasPistol: player.hasPistol,
       ammo: player.ammo,
+      rep: Math.round(player.rep ?? 0),
+      arsenal: player.arsenal ?? null,
       health: Math.round(player.health),
       x: Math.round(player.x),
       y: Math.round(player.y),
@@ -59,5 +63,7 @@ export function freshStats() {
     timesWasted: 0,
     shotsFired: 0,
     packagesFound: 0,
+    racesRun: 0,
+    racesWon: 0,
   };
 }

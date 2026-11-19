@@ -3,10 +3,10 @@
 // pulled from his car becomes a ped again mid-scene. The player, Mari Voss, is the
 // same kind of body with a wallet, a gun (once the story gives her one) and a name.
 
-import { TUNING, WORLD } from './config.js';
-import { clamp, distance, pick, randRange } from './random.js';
-import { isRoadPoint, slideMove } from './world.js';
-import { sfx } from './audio.js';
+import { TUNING, WORLD } from '../core/config.js';
+import { clamp, distance, pick, randRange } from '../core/random.js';
+import { isRoadPoint, slideMove } from '../world/world.js';
+import { sfx } from '../audio/audio.js';
 
 const SHIRTS = ['#e15f78', '#4bcffa', '#f2b134', '#58b368', '#e8e4da', '#a55eea', '#fd9644', '#25c2a0'];
 const PANTS = ['#2f3542', '#57606f', '#747d8c', '#3b3b98', '#82589f', '#2e5e4e'];
@@ -49,6 +49,12 @@ export function createPlayer(x, y) {
     car: null, // the vehicle being driven, or null on foot
     hasPistol: false,
     ammo: 0,
+    rep: 0, // respect points; systems/reputation.js turns them into a rank
+    arsenal: {
+      current: 'fists',
+      owned: ['fists'],
+      ammo: { pistol: 0, smg: 0, shotgun: 0, rifle: 0 },
+    },
     walkPhase: 0,
     punchTimer: 0,
     fireTimer: 0,

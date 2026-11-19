@@ -6,17 +6,21 @@
 import { TUNING, WORLD } from './config.js';
 import { makeRng, clamp, distance } from './random.js';
 import { attachInput, endFrameInput, keys, mouse, moveAxis, pressed } from './input.js';
-import { initAudio, setEngine, setSiren, sfx, toggleMute, updateMusic } from './audio.js';
-import { buildWorld, slideMove, PLACES } from './world.js';
-import { createPlayer, spawnPeds, updatePed, recyclePeds } from './people.js';
-import { createPoliceSystem, nearestPoliceDistance } from './police.js';
-import { createCombat } from './combat.js';
-import { createMissionSystem, STORY } from './missions.js';
-import { collideCars, collideCarsWithPeople, spawnTraffic, speedOf, stepCar, trafficInput } from './vehicles.js';
-import { drawScene } from './render.js';
-import { drawEndScreen, drawHUD, drawPause, drawTitle } from './hud.js';
+import { initAudio, setEngine, setSiren, sfx, toggleMute, updateMusic } from '../audio/audio.js';
+import { buildWorld, slideMove, PLACES } from '../world/world.js';
+import { createPlayer, spawnPeds, updatePed, recyclePeds } from '../people/people.js';
+import { createPoliceSystem, nearestPoliceDistance } from '../police/police.js';
+import { createCombat } from '../combat/combat.js';
+import { createMissionSystem, STORY } from '../missions/missions.js';
+import { collideCars, collideCarsWithPeople, spawnTraffic, speedOf, stepCar, trafficInput } from '../vehicles/vehicles.js';
+import { drawScene } from '../world/render.js';
+import { drawEndScreen, drawHUD, drawPause, drawTitle, wheelSlotAt } from '../ui/hud.js';
 import { clearSave, freshStats, loadSave, storeSave } from './save.js';
-import { stageShot } from './shots.js';
+import { stageShot, stageShowcase } from '../showcase/scenes.js';
+import { WEAPON_ORDER, ammoDeal, buyNextWeapon, cycleWeapon, ensureArsenal, nearGunStore, nextWeaponForSale, selectWeapon } from '../systems/weapons.js';
+import { createRadio, cycleStation, updateRadio } from '../systems/radio.js';
+import { buyService, nearGarage } from '../systems/garage.js';
+import { RACE_ENTRY, createRace, raceStartAvailable, startRace, updateRace } from '../systems/race.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -58,6 +62,11 @@ const game = {
   lastFine: 0,
   wastedCause: '',
   saveTimer: 0,
+  wheelOpen: false,
+  garageOpen: false,
+  showcase: false,
+  radio: createRadio(),
+  race: createRace(),
 
   toast(text) {
     this.toasts.push({ text, ttl: 3.6 });
@@ -138,6 +147,10 @@ function initRun(save) {
   game.effects = [];
   game.toasts = [];
   game.dialogue = null;
+  game.wheelOpen = false;
+  game.garageOpen = false;
+  game.showcase = false;
+  game.race = createRace();
   game.clockMinutes = TUNING.startMinute;
   game.vehicles = spawnTraffic(game, game.rng);
   game.peds = spawnPeds(game, game.rng);
@@ -145,6 +158,9 @@ function initRun(save) {
     game.player.cash = save.cash;
     game.player.hasPistol = !!save.hasPistol;
     game.player.ammo = save.ammo ?? 0;
+    game.player.rep = save.rep ?? 0;
+    if (save.arsenal) game.player.arsenal = save.arsenal;
+    ensureArsenal(game.player);
     game.player.health = clamp(save.health ?? 100, 20, 100);
     game.player.x = save.x ?? PLACES.start.x;
     game.player.y = save.y ?? PLACES.start.y;
@@ -172,6 +188,26 @@ function updatePlayer(dt) {
   player.fireTimer -= dt;
   player.hurtTimer -= dt;
 
+  // The weapon wheel freezes the street while Mari chooses.
+  if (pressed.has('Tab')) {
+    game.wheelOpen = !game.wheelOpen;
+    return;
+  }
+  if (game.wheelOpen) {
+    for (let i = 0; i < WEAPON_ORDER.length; i += 1) {
+      if (pressed.has(`Digit${i + 1}`) && selectWeapon(game, WEAPON_ORDER[i])) {
+        game.wheelOpen = false;
+        return;
+      }
+    }
+    if (mouse.clicked) {
+      const slot = wheelSlotAt(mouse.x - canvas.width / 2, mouse.y - canvas.height / 2);
+      if (slot >= 0 && selectWeapon(game, WEAPON_ORDER[slot])) game.wheelOpen = false;
+    }
+    return;
+  }
+  if (pressed.has('KeyQ')) cycleWeapon(game);
+
   if (player.car) {
     const car = player.car;
     const input = { throttle: 0, steer: 0, handbrake: keys.has('Space') };
@@ -185,6 +221,7 @@ function updatePlayer(dt) {
     player.angle = car.angle;
     game.stats.distanceDriven += speedOf(car) * dt;
     setEngine(true, clamp(speedOf(car) / car.spec.topSpeed, 0, 1), car.health < 30);
+    if (pressed.has('KeyR')) cycleStation(game);
     if (pressed.has('KeyE')) {
       if (speedOf(car) < 95) exitCar();
       else game.toast('Too fast to bail out');
@@ -217,6 +254,7 @@ function updatePlayer(dt) {
     const car = nearestEnterableCar();
     if (car) enterCar(car);
   }
+  if (pressed.has('KeyB') && nearGunStore(game)) buyNextWeapon(game);
   if (mouse.clicked || mouse.down || pressed.has('KeyF')) {
     const aim = game.screenToWorld(mouse.x, mouse.y);
     game.combat.playerAttack(game, aim.x, aim.y);
@@ -283,6 +321,14 @@ function updatePrompt() {
   game.prompt = '';
   if (game.state !== 'play' || game.dialogue) return;
   if (player.car) {
+    if (nearGarage(game)) {
+      game.prompt = "G — Tito's Garage: tune, armour, respray";
+      return;
+    }
+    if (raceStartAvailable(game)) {
+      game.prompt = `G — The Marina Mile street race ($${RACE_ENTRY} entry)`;
+      return;
+    }
     if (speedOf(player.car) < 95) game.prompt = 'E — Get out';
     return;
   }
@@ -291,14 +337,21 @@ function updatePrompt() {
     game.prompt = car.driver ? `E — Pull the driver out of the ${car.spec.name}` : `E — Enter ${car.spec.name}`;
     return;
   }
-  if (player.hasPistol && player.cash >= 40
-    && distance(player.x, player.y, PLACES.gunStore.x, PLACES.gunStore.y) < 46) {
-    game.prompt = 'E — Buy 18 rounds ($40) at Anchor Arms';
+  if (nearGunStore(game)) {
+    const next = nextWeaponForSale(game);
+    const deal = ammoDeal(game);
+    if (next) game.prompt = `B — Buy the ${next.name} ($${next.price}) at Anchor Arms`;
+    else if (deal) game.prompt = `E — Buy ${deal.amount} ${deal.label} ($${deal.price}) at Anchor Arms`;
   }
 }
 
 function updatePlay(dt) {
   game.clockMinutes = (game.clockMinutes + dt * (1440 / TUNING.dayLengthSeconds)) % 1440;
+  if (game.garageOpen) {
+    // Tito is talking; the street waits. G closes the menu, the buttons buy.
+    if (pressed.has('KeyG')) game.garageOpen = false;
+    return;
+  }
   if (game.dialogue) {
     const dialogue = game.dialogue;
     if (pressed.has('KeyE') || pressed.has('Enter') || mouse.clicked) {
@@ -320,6 +373,15 @@ function updatePlay(dt) {
     return;
   }
 
+  if (pressed.has('KeyG')) {
+    if (nearGarage(game)) {
+      game.garageOpen = true;
+      sfx.click();
+    } else if (raceStartAvailable(game)) {
+      startRace(game);
+    }
+  }
+
   game.missions.update(game, dt);
   updatePlayer(dt);
 
@@ -337,6 +399,8 @@ function updatePlay(dt) {
   collideCarsWithPeople(game);
   for (const ped of game.peds) updatePed(game, ped, dt, game.rng);
   game.police.update(game, dt, game.rng);
+  updateRace(game, dt);
+  updateRadio(game, dt);
   recyclePeds(game, game.rng);
 
   const nearest = nearestPoliceDistance(game);
@@ -417,6 +481,14 @@ function onButton(id) {
     setSiren(0);
   } else if (id === 'again') {
     game.state = 'play';
+  } else if (id === 'showcase') {
+    initRun(null);
+    stageShowcase(game);
+    game.state = 'play';
+  } else if (id.startsWith('garage:')) {
+    const service = id.slice('garage:'.length);
+    if (service === 'close') game.garageOpen = false;
+    else buyService(game, service);
   }
 }
 
@@ -464,6 +536,7 @@ function frame(now) {
     updateEffects(dt);
     drawScene(ctx, game);
     drawHUD(ctx, game);
+    if (game.garageOpen) handleButtons();
   } else if (game.state === 'pause') {
     drawScene(ctx, game);
     drawPause(ctx, game);

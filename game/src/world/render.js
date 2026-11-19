@@ -4,8 +4,9 @@
 // washes over all of it. The HUD is hud.js; this file only draws the world itself,
 // through the camera, culling whatever is off screen.
 
-import { PALETTE, WORLD } from './config.js';
-import { clamp } from './random.js';
+import { PALETTE, WORLD } from '../core/config.js';
+import { clamp } from '../core/random.js';
+import { currentWeapon } from '../systems/weapons.js';
 
 function hash2(a, b) {
   let h = (a * 374761393 + b * 668265263) ^ 0x5bf03635;
@@ -456,12 +457,20 @@ function drawPlayer(ctx, game) {
   ctx.arc(1.4, 0, 4.2, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillRect(-5.4, -1.6, 4.4, 3.2);
-  if (player.hasPistol) {
+  const held = currentWeapon(player);
+  if (held.kind === 'gun') {
     ctx.strokeStyle = '#22242a';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(6, 3);
-    ctx.lineTo(14, 3.6);
+    ctx.lineTo(held.id === 'rifle' ? 19 : held.id === 'shotgun' ? 17 : 14, 3.6);
+    ctx.stroke();
+  } else if (held.id === 'pipe') {
+    ctx.strokeStyle = '#8a8f96';
+    ctx.lineWidth = 3.6;
+    ctx.beginPath();
+    ctx.moveTo(5, 3);
+    ctx.lineTo(17, 4.4);
     ctx.stroke();
   }
   ctx.restore();

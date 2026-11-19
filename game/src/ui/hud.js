@@ -1,14 +1,19 @@
 // hud.js — everything drawn over the world: the HUD (health, cash, wanted stars,
-// clock, weapon), the live minimap with its blips, the objective banner and
-// dialogue box, toasts, the bust meter, and every full screen — title, pause,
-// busted, wasted and story complete. Buttons drawn here are registered on
-// game.uiButtons so main.js can answer the mouse.
+// clock, the current weapon, her respect rank, the radio station), the live
+// minimap with its blips, the objective banner and dialogue box, toasts, the
+// bust meter, the weapon wheel and Tito's garage menu, and every full screen —
+// title, pause, busted, wasted and story complete. Buttons drawn here are
+// registered on game.uiButtons so main.js can answer the mouse.
 
-import { WORLD, TUNING, CONTROLS_TEXT } from './config.js';
-import { formatClock, formatMoney, clamp } from './random.js';
-import { PLACES } from './world.js';
-import { policeUnits } from './police.js';
-import { STORY } from './missions.js';
+import { WORLD, TUNING, CONTROLS_TEXT } from '../core/config.js';
+import { formatClock, formatMoney, clamp } from '../core/random.js';
+import { PLACES } from '../world/world.js';
+import { policeUnits } from '../police/police.js';
+import { STORY } from '../missions/missions.js';
+import { WEAPONS, WEAPON_ORDER, ammoOf, currentWeapon, ensureArsenal } from '../systems/weapons.js';
+import { rankFor } from '../systems/reputation.js';
+import { stationLabel } from '../systems/radio.js';
+import { GARAGE_SERVICES, carTune, serviceState } from '../systems/garage.js';
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 
@@ -17,22 +22,34 @@ export function drawHUD(ctx, game) {
   const H = ctx.canvas.height;
   const player = game.player;
 
-  // Top-left: who she is, how she is, what she holds.
-  panel(ctx, 16, 16, 232, 86);
+  // Top-left: who she is, how she is, what she holds, what the city calls her.
+  panel(ctx, 16, 16, 252, 112);
   ctx.fillStyle = '#f4ead2';
   ctx.font = `bold 13px ${FONT}`;
   ctx.fillText('MARI VOSS', 28, 38);
   ctx.fillStyle = '#9fb4c0';
   ctx.font = `11px ${FONT}`;
   ctx.fillText(player.car ? `Driving — ${player.car.spec.name}` : 'On foot', 118, 38);
-  bar(ctx, 28, 48, 208, 12, player.health / player.maxHealth, '#d94f3d', '#571f18');
+  bar(ctx, 28, 48, 228, 12, player.health / player.maxHealth, '#d94f3d', '#571f18');
   ctx.fillStyle = '#f4ead2';
   ctx.font = `bold 15px ${FONT}`;
   ctx.fillText(formatMoney(player.cash), 28, 84);
   ctx.fillStyle = '#9fb4c0';
   ctx.font = `12px ${FONT}`;
-  const weapon = player.hasPistol ? `Pistol · ${player.ammo} rounds` : 'Fists';
-  ctx.fillText(weapon, 118, 84);
+  const spec = currentWeapon(player);
+  const weapon = spec.kind === 'gun' ? `${spec.name} · ${ammoOf(player, spec)}` : spec.name;
+  ctx.fillText(weapon, 128, 84);
+  const rank = rankFor(player.rep ?? 0);
+  ctx.fillStyle = '#f2b134';
+  ctx.font = `bold 11px ${FONT}`;
+  ctx.fillText(`RESPECT ${player.rep ?? 0} · ${rank.title.toUpperCase()}`, 28, 104);
+  if (player.car) {
+    ctx.fillStyle = '#7fe3dd';
+    ctx.font = `11px ${FONT}`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`♪ ${stationLabel(game)}`, 256, 104);
+    ctx.textAlign = 'left';
+  }
 
   // Top-right: the law's opinion, and the time. A backing panel keeps the
   // stars and clock readable over pale rooftops and sand.
@@ -81,6 +98,119 @@ export function drawHUD(ctx, game) {
     ctx.textAlign = 'left';
   }
   if (game.dialogue) drawDialogue(ctx, game);
+  if (game.wheelOpen) drawWeaponWheel(ctx, game);
+  if (game.garageOpen) drawGarageMenu(ctx, game);
+}
+
+// ---- The weapon wheel ---------------------------------------------------------
+
+const WHEEL_RADIUS = 132;
+
+// Which wheel slot a point (relative to the screen centre) falls on, or -1.
+// Slots follow WEAPON_ORDER, starting at the top and running clockwise.
+export function wheelSlotAt(dx, dy) {
+  const r = Math.hypot(dx, dy);
+  if (r < 36 || r > WHEEL_RADIUS + 26) return -1;
+  let angle = Math.atan2(dy, dx) + Math.PI / 2;
+  if (angle < 0) angle += Math.PI * 2;
+  return Math.floor(angle / (Math.PI * 2 / WEAPON_ORDER.length)) % WEAPON_ORDER.length;
+}
+
+function drawWeaponWheel(ctx, game) {
+  const W = ctx.canvas.width;
+  const H = ctx.canvas.height;
+  const cx = W / 2;
+  const cy = H / 2;
+  const arsenal = ensureArsenal(game.player);
+  ctx.fillStyle = 'rgba(8,10,15,0.45)';
+  ctx.fillRect(0, 0, W, H);
+  const step = Math.PI * 2 / WEAPON_ORDER.length;
+  WEAPON_ORDER.forEach((id, i) => {
+    const spec = WEAPONS[id];
+    const owned = arsenal.owned.includes(id);
+    const selected = arsenal.current === id;
+    const a0 = -Math.PI / 2 + i * step + 0.045;
+    const a1 = -Math.PI / 2 + (i + 1) * step - 0.045;
+    ctx.beginPath();
+    ctx.arc(cx, cy, WHEEL_RADIUS, a0, a1);
+    ctx.arc(cx, cy, 40, a1, a0, true);
+    ctx.closePath();
+    ctx.fillStyle = selected ? 'rgba(242,177,52,0.88)' : owned ? 'rgba(23,30,40,0.88)' : 'rgba(23,30,40,0.55)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(244,234,210,0.25)';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    const mid = (a0 + a1) / 2;
+    const tx = cx + Math.cos(mid) * (WHEEL_RADIUS + 40) / 2;
+    const ty = cy + Math.sin(mid) * (WHEEL_RADIUS + 40) / 2;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = selected ? '#241a05' : owned ? '#f4ead2' : 'rgba(244,234,210,0.45)';
+    ctx.font = `bold 12px ${FONT}`;
+    ctx.fillText(`${i + 1} · ${spec.name}`, tx, ty - 2);
+    ctx.font = `11px ${FONT}`;
+    ctx.fillStyle = selected ? '#241a05' : 'rgba(159,180,192,0.9)';
+    const sub = !owned ? `$${spec.price} at Anchor Arms`
+      : spec.kind === 'gun' ? `${arsenal.ammo[spec.ammoType]} rounds`
+        : spec.kind === 'melee' ? 'melee' : '';
+    ctx.fillText(sub, tx, ty + 13);
+    ctx.textAlign = 'left';
+  });
+  ctx.fillStyle = '#f4ead2';
+  ctx.font = `bold 13px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.fillText('WEAPONS', cx, cy + 4);
+  ctx.fillStyle = '#9fb4c0';
+  ctx.font = `11px ${FONT}`;
+  ctx.fillText('click or 1–6', cx, cy + 20);
+  ctx.textAlign = 'left';
+}
+
+// ---- Tito's garage menu ---------------------------------------------------------
+
+function drawGarageMenu(ctx, game) {
+  const W = ctx.canvas.width;
+  const H = ctx.canvas.height;
+  const car = game.player.car;
+  ctx.fillStyle = 'rgba(8,10,15,0.55)';
+  ctx.fillRect(0, 0, W, H);
+  const w = 520;
+  const h = 396;
+  const x = W / 2 - w / 2;
+  const y = H / 2 - h / 2;
+  panel(ctx, x, y, w, h);
+  ctx.fillStyle = '#f2b134';
+  ctx.font = `900 24px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.fillText("TITO'S AUTO WORKS", W / 2, y + 38);
+  ctx.fillStyle = '#f4ead2';
+  ctx.font = `14px ${FONT}`;
+  if (!car) {
+    ctx.fillText('Bring a car in, Mari.', W / 2, y + 76);
+  } else {
+    const tune = carTune(car);
+    const pips = (n) => '▮'.repeat(n) + '▯'.repeat(2 - n);
+    ctx.fillText(`${car.spec.name} · health ${Math.round(car.health)}/${car.maxHealth} · cash ${formatMoney(game.player.cash)}`, W / 2, y + 66);
+    ctx.fillStyle = '#9fb4c0';
+    ctx.font = `12px ${FONT}`;
+    ctx.fillText(`Engine tune ${pips(tune.engine)} · Armour ${pips(tune.armour)}`, W / 2, y + 88);
+    ctx.textAlign = 'left';
+    let rowY = y + 108;
+    for (const service of GARAGE_SERVICES) {
+      const state = serviceState(game, service);
+      ctx.fillStyle = '#f4ead2';
+      ctx.font = `bold 15px ${FONT}`;
+      const stageNote = (service.id === 'engine' || service.id === 'armour') && state.stage !== undefined && state.stage < service.max
+        ? ` — stage ${state.stage + 1}` : '';
+      ctx.fillText(service.name + stageNote, x + 24, rowY + 24);
+      ctx.fillStyle = '#9fb4c0';
+      ctx.font = `12px ${FONT}`;
+      ctx.fillText(service.blurb, x + 24, rowY + 44);
+      drawButton(ctx, game, `garage:${service.id}`, x + w - 138, rowY + 6, 114, 40, state.label, state.enabled);
+      rowY += 56;
+    }
+  }
+  ctx.textAlign = 'left';
+  drawButton(ctx, game, 'garage:close', W / 2 - 80, y + h - 52, 160, 38, 'DONE', true);
 }
 
 function panel(ctx, x, y, w, h) {
@@ -350,6 +480,8 @@ export function drawTitle(ctx, game) {
     drawButton(ctx, game, 'continue', bx, by, bw, 48, 'CONTINUE');
     by += 60;
   }
+  drawButton(ctx, game, 'showcase', bx, by, bw, 48, 'SHOWCASE');
+  by += 60;
   drawButton(ctx, game, 'help', bx, by, bw, 48, game.showHelp ? 'HIDE CONTROLS' : 'HOW TO PLAY');
   if (game.showHelp) {
     ctx.font = `15px ${FONT}`;
@@ -377,7 +509,7 @@ export function drawPause(ctx, game) {
   const s = game.stats;
   ctx.font = `16px ${FONT}`;
   ctx.fillStyle = '#f4ead2';
-  ctx.fillText(`Cash ${formatMoney(game.player.cash)} · Jobs done ${s.missionsDone} · Fares ${s.faresDone} · Cars stolen ${s.carsStolen} · Packages ${s.packagesFound}/12`, W / 2, H * 0.3 + 44);
+  ctx.fillText(`Cash ${formatMoney(game.player.cash)} · Jobs done ${s.missionsDone} · Fares ${s.faresDone} · Cars stolen ${s.carsStolen} · Packages ${s.packagesFound}/12 · Races won ${s.racesWon ?? 0}/${s.racesRun ?? 0} · Respect ${game.player.rep ?? 0}`, W / 2, H * 0.3 + 44);
   const bw = 250;
   const bx = W / 2 - bw / 2;
   let by = H * 0.46;

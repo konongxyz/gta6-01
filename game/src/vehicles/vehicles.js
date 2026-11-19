@@ -4,10 +4,10 @@
 // between cars, buildings and people. Police driving lives in police.js but uses
 // the same stepCar physics from here.
 
-import { VEHICLE_TYPES, CAR_COLORS, WORLD, TUNING } from './config.js';
-import { clamp, distance, pick, randRange } from './random.js';
-import { carHitsBuilding } from './world.js';
-import { sfx } from './audio.js';
+import { VEHICLE_TYPES, CAR_COLORS, WORLD, TUNING } from '../core/config.js';
+import { clamp, distance, pick, randRange } from '../core/random.js';
+import { carHitsBuilding } from '../world/world.js';
+import { sfx } from '../audio/audio.js';
 
 let nextVehicleId = 1;
 
@@ -45,11 +45,13 @@ export function forwardSpeed(car) {
 export function stepCar(game, car, dt, input) {
   const spec = car.spec;
   const fwd = forwardSpeed(car);
-  const maxFwd = spec.topSpeed * (car.health < 25 ? 0.55 : 1);
+  // A garage tune (systems/garage.js) stretches the spec it was paid for.
+  const tuneMul = car.tune ? 1 + car.tune.engine * 0.09 : 1;
+  const maxFwd = spec.topSpeed * tuneMul * (car.health < 25 ? 0.55 : 1);
   const maxRev = -spec.topSpeed * 0.32;
 
   if (input.throttle > 0 && fwd < maxFwd) {
-    const force = spec.accel * input.throttle * (1 - Math.max(0, fwd) / (maxFwd * 1.25));
+    const force = spec.accel * tuneMul * input.throttle * (1 - Math.max(0, fwd) / (maxFwd * 1.25));
     car.vx += Math.cos(car.angle) * force * dt;
     car.vy += Math.sin(car.angle) * force * dt;
   } else if (input.throttle < 0) {
@@ -126,6 +128,8 @@ export function stepCar(game, car, dt, input) {
 
 export function damageCar(game, car, amount, cause) {
   if (car.wrecked) return;
+  // Armour plating (systems/garage.js) eats a share of every hit.
+  if (car.tune) amount *= 1 - car.tune.armour * 0.18;
   car.health -= amount;
   if (car.health <= 0) {
     car.health = 0;

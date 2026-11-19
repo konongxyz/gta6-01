@@ -50,8 +50,10 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
 - **W A S D / arrows** — walk and drive · **Shift** — run
 - **E** — enter and exit cars (walk up to one; occupied cars can be carjacked)
-- **Space** — handbrake · **Mouse** — aim · **Click / F** — punch, or shoot once
-  Mari earns her pistol in the second story job
+- **Space** — handbrake · **Mouse** — aim · **Click / F** — punch, or shoot with
+  the weapon in hand (the pistol is earned in the second story job)
+- **Tab** — weapon wheel · **Q** — swap weapon · **B** — buy a weapon at Anchor Arms
+- **R** — radio (in a car) · **G** — Tito's garage at his forecourt / start the Marina Mile at the Boardwalk Stage
 - **P / Esc** — pause · **M** — mute
 
 Systems in the city: a five-star wanted ladder that only rises when a crime is
@@ -63,16 +65,26 @@ flee, and occasionally fight back; car damage, smoke and wrecks; a day-night
 cycle; fares that pay by distance with tips for speed; a hospital that patches
 you up and a gun store that sells rounds; and a save that survives the tab.
 
+Round six adds the systems the top of the board runs: an **arsenal of six
+weapons** (fists, lead pipe, 9mm, SMG, shotgun, assault rifle) behind a
+selection wheel; a **car radio** with three named synthesized stations;
+a **respect ladder** of nine titled ranks earned from jobs, fares and races;
+**Tito's garage** selling engine tunes, armour plating, repairs and resprays;
+the **Marina Mile**, a six-gate street race against two rival drivers; and a
+**Showcase** state on the title screen that drops you into the city at full
+heat — four stars, helicopter overhead, roadblock ahead, every system live.
+
 ## Layout
 
 - `game/index.html` — the page; `game/style.css` — the page chrome
-- `game/src/main.js` — the loop and the wiring · `world.js` — Port Solano itself
-- `game/src/vehicles.js` — driving and traffic · `people.js` — pedestrians and Mari
-- `game/src/police.js` — the wanted system and the law · `combat.js` — fists and fire
-- `game/src/missions.js` — the seven story jobs, fares and pickups
-- `game/src/render.js` — the world on canvas · `hud.js` — HUD, minimap, menus
-- `game/src/audio.js` — synthesized sound · `save.js` — the local save
-- `game/src/shots.js` — the staged scenes behind `screenshots/`
+- `game/src/core/` — `main.js` (the loop and the wiring), `config.js`, `random.js`, `input.js`, `save.js`
+- `game/src/world/` — `world.js` (Port Solano itself), `render.js` (the world on canvas)
+- `game/src/vehicles/vehicles.js` — driving and traffic · `game/src/people/people.js` — pedestrians and Mari
+- `game/src/police/police.js` — the wanted system and the law · `game/src/combat/combat.js` — the arsenal at work
+- `game/src/missions/missions.js` — the seven story jobs, fares and pickups
+- `game/src/systems/` — `weapons.js` (the arsenal and its wheel), `radio.js` (three stations), `reputation.js` (respect ranks), `garage.js` (Tito's services), `race.js` (the Marina Mile)
+- `game/src/audio/audio.js` — synthesized sound · `game/src/ui/hud.js` — HUD, minimap, menus, the wheel
+- `game/src/showcase/scenes.js` — the staged scenes behind `screenshots/`, and the Showcase state
 - `main.ts` — the hand-in program · `vendor/makefun-game.ts` — the kit's library
 
 ## License

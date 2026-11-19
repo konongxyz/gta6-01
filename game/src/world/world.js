@@ -3,8 +3,8 @@
 // the story visits, parking spots and the hidden cash packages. The city is built
 // once from a fixed seed, and the collision helpers every mover uses live here too.
 
-import { WORLD, BUILDING_COLORS } from './config.js';
-import { makeRng, pick, randInt, randRange } from './random.js';
+import { WORLD, BUILDING_COLORS } from '../core/config.js';
+import { makeRng, pick, randInt, randRange } from '../core/random.js';
 
 export const PLACES = {
   start: { x: 3052, y: 2470, name: 'Marina Café', blip: 'cafe' },
