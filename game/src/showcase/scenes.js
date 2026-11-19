@@ -1,0 +1,240 @@
+// scenes.js (showcase/) — staged scenes for the entry's screenshots, plus the
+// playable Showcase state behind the title screen's SHOWCASE button. The kit's own
+// shots.json pattern: open the game with ?shot=<name>&seed=<n> and it sets up a
+// real, playable scene from the game's own systems — the same cars, police, HUD
+// and missions a player gets — frozen at a photogenic moment. Nothing here draws
+// anything itself; it only places the pieces, and the normal loop renders them.
+
+import { PLACES } from '../world/world.js';
+import { createVehicle } from '../vehicles/vehicles.js';
+import { createPed } from '../people/people.js';
+import { STORY } from '../missions/missions.js';
+
+export function stageShot(game, name) {
+  const rng = game.rng;
+  game.state = 'play';
+  game.showcase = true;
+  game.vehicles.length = 0;
+  game.peds.length = 0;
+  game.toasts.length = 0;
+  const player = game.player;
+
+  const putCar = (type, x, y, angle, kind = 'traffic') => {
+    const car = createVehicle(type, x, y, angle, kind, rng);
+    game.vehicles.push(car);
+    return car;
+  };
+  const putPed = (x, y, isCop = false) => {
+    const ped = createPed(x, y, rng, isCop);
+    game.peds.push(ped);
+    return ped;
+  };
+  const putCopCar = (x, y, angle) => {
+    const car = putCar('police', x, y, angle, 'police');
+    const cop = putPed(x, y, true);
+    cop.inCar = car;
+    cop.state = 'driver';
+    car.driver = cop;
+    return car;
+  };
+
+  if (name === 'cover') {
+    // The cover: a three-star chase down the coastal avenue, a delivery on the
+    // clock, the minimap lit with police — the whole game in one frame.
+    game.clockMinutes = 16 * 60 + 24;
+    const car = putCar('sport', 2880, 1560, Math.PI / 2, 'traffic');
+    car.color = '#d94f3d';
+    player.car = car;
+    car.driver = 'player';
+    player.x = car.x;
+    player.y = car.y;
+    car.vx = 0;
+    car.vy = 250;
+    putCopCar(2880, 1330, Math.PI / 2);
+    putCopCar(2810, 1180, Math.PI / 2 + 0.14);
+    putCopCar(2960, 1420, Math.PI / 2 - 0.1);
+    putCar('sedan', 2796, 1980, Math.PI / 2);
+    putCar('taxi', 2964, 2090, -Math.PI / 2);
+    putCar('coupe', 2880, 760, Math.PI / 2);
+    for (let i = 0; i < 7; i += 1) putPed(2985 + (i % 3) * 26, 1450 + i * 90);
+    for (let i = 0; i < 4; i += 1) putPed(2780, 1750 + i * 110);
+    game.police.points = 62;
+    game.police.refreshStars();
+    player.cash = 1240;
+    game.missions.index = 3;
+    game.missions.active = { def: STORY[3], stepIndex: 1, timerLeft: 231, targetCar: null, passenger: null };
+    game.toast('Drop 1 of 3 — the heat is watching');
+  } else if (name === 'onfoot') {
+    // Downtown on foot: Mari in the crowd, Dex on the phone, the next job marked.
+    game.clockMinutes = 11 * 60 + 5;
+    player.x = 1560;
+    player.y = 1748;
+    player.angle = 0.4;
+    player.hasPistol = true;
+    player.ammo = 18;
+    player.cash = 640;
+    for (let i = 0; i < 9; i += 1) putPed(1470 + (i % 3) * 90, 1660 + Math.floor(i / 3) * 110);
+    putCar('sedan', 1600, 1560, 0);
+    putCar('hatch', 1450, 1684, Math.PI);
+    putCar('truck', 2240, 1830, Math.PI / 2);
+    game.missions.index = 1;
+    game.dialogue = {
+      lines: [['Dex', 'The gold Aurelia GT is sitting in the Azahar lot, Mari. Tito wants it tonight — and tonight I mean before the owner finishes dinner.']],
+      at: 0,
+      lineAt: -10,
+      onDone: () => {},
+    };
+  } else if (name === 'mission') {
+    // A fare on the clock: passenger aboard, destination marked, city rolling by.
+    game.clockMinutes = 14 * 60 + 42;
+    const car = putCar('taxi', 1180, 990, 0, 'traffic');
+    player.car = car;
+    car.driver = 'player';
+    player.x = car.x;
+    player.y = car.y;
+    car.vx = 210;
+    car.vy = 0;
+    const passenger = putPed(car.x, car.y);
+    passenger.inCar = car;
+    passenger.state = 'passenger';
+    game.missions.fare = {
+      ped: passenger, phase: 'drive',
+      destX: PLACES.hotelLot.x, destY: PLACES.hotelLot.y,
+      fare: 86, elapsed: 34, par: 96,
+    };
+    putCar('sedan', 1600, 876, 0);
+    putCar('van', 960, 1150, Math.PI / 2);
+    putCar('coupe', 1980, 1044, Math.PI);
+    for (let i = 0; i < 6; i += 1) putPed(1330 + i * 70, 1090 + (i % 2) * 130);
+    player.cash = 890;
+    game.toast('Fare aboard — the Azahar Hotel, and step on it');
+  } else if (name === 'chase') {
+    // Five stars at dusk: the intersection is full of Interceptors and Mari's
+    // coupe is still rolling — for now. The bust meter says otherwise.
+    game.clockMinutes = 18 * 60 + 38;
+    const car = putCar('coupe', 1600, 1620, 0.5, 'traffic');
+    car.color = '#4bcffa';
+    car.health = 58;
+    player.car = car;
+    car.driver = 'player';
+    player.x = car.x;
+    player.y = car.y;
+    car.vx = 130;
+    car.vy = 60;
+    putCopCar(1600, 1330, Math.PI / 2);
+    putCopCar(1790, 1560, 2.6);
+    putCopCar(1660, 1830, -1.2);
+    putCopCar(1330, 1605, 0);
+    const cop = putPed(1705, 1700, true);
+    cop.state = 'chase';
+    for (let i = 0; i < 5; i += 1) {
+      const ped = putPed(1500 + i * 55, 1900 + (i % 2) * 60);
+      ped.state = 'flee';
+      ped.threatX = car.x;
+      ped.threatY = car.y;
+    }
+    game.police.points = 165;
+    game.police.refreshStars();
+    game.police.bustMeter = 0.42;
+    player.cash = 1730;
+    game.effects.push({ kind: 'smoke', x: car.x - 20, y: car.y - 10, ttl: 0.8, max: 0.8, rise: -16 });
+  } else if (name === 'showcase') {
+    buildShowcase(game, putCar, putPed, putCopCar);
+  }
+  game.camera.x = player.x;
+  game.camera.y = player.y;
+}
+
+// The Showcase: the whole game in one playable moment — a tuned Aurelia GT at
+// dusk, four stars, the helicopter's light on the car, a roadblock ahead, every
+// weapon on the wheel, and a Shot Caller's name on the HUD. The title screen's
+// SHOWCASE button drops a player straight into this same live state.
+export function stageShowcase(game) {
+  const rng = game.rng;
+  game.state = 'play';
+  game.showcase = true;
+  game.vehicles.length = 0;
+  game.peds.length = 0;
+  game.toasts.length = 0;
+  const putCar = (type, x, y, angle, kind = 'traffic') => {
+    const car = createVehicle(type, x, y, angle, kind, rng);
+    game.vehicles.push(car);
+    return car;
+  };
+  const putPed = (x, y, isCop = false) => {
+    const ped = createPed(x, y, rng, isCop);
+    game.peds.push(ped);
+    return ped;
+  };
+  const putCopCar = (x, y, angle) => {
+    const car = putCar('police', x, y, angle, 'police');
+    const cop = putPed(x, y, true);
+    cop.inCar = car;
+    cop.state = 'driver';
+    car.driver = cop;
+    return car;
+  };
+  buildShowcase(game, putCar, putPed, putCopCar);
+  game.camera.x = game.player.x;
+  game.camera.y = game.player.y;
+}
+
+function buildShowcase(game, putCar, putPed, putCopCar) {
+  const player = game.player;
+  game.clockMinutes = 18 * 60 + 24;
+  // Mari at the top of her game: every weapon owned, the SMG in hand, a Shot
+  // Caller's respect and a wallet to match.
+  player.arsenal = {
+    current: 'smg',
+    owned: ['fists', 'pipe', 'pistol', 'smg', 'shotgun', 'rifle'],
+    ammo: { pistol: 36, smg: 120, shotgun: 20, rifle: 48 },
+  };
+  player.hasPistol = true;
+  player.ammo = 36;
+  player.rep = 560;
+  player.cash = 8640;
+  player.health = 100;
+  game.missions.index = STORY.length;
+  game.missions.storyDone = true;
+
+  // Her ride: a red Aurelia GT, Tito-tuned to stage 2 with stage 1 armour.
+  const car = putCar('sport', 1500, 1600, 0, 'traffic');
+  car.color = '#d94f3d';
+  car.tune = { engine: 2, armour: 1 };
+  player.car = car;
+  car.driver = 'player';
+  player.x = car.x;
+  player.y = car.y;
+  car.vx = 200;
+  car.vy = 0;
+
+  // Four stars of company: three Interceptors on her tail, the helicopter
+  // overhead, and a roadblock waiting up the avenue.
+  putCopCar(1300, 1552, 0.08);
+  putCopCar(1335, 1658, -0.1);
+  putCopCar(1740, 1470, 2.4);
+  game.police.points = 120;
+  game.police.refreshStars();
+  game.police.heli = { x: player.x - 120, y: player.y - 170, angle: 0.6, orbit: 2.1 };
+  game.police.spawnRoadblock(game, game.rng);
+  game.police.bustMeter = 0.25;
+
+  // A living street around her: traffic on both avenues, crowds on the walks.
+  putCar('sedan', 1980, 1560, 0);
+  putCar('taxi', 1150, 1650, Math.PI);
+  putCar('van', 2240, 1330, Math.PI / 2);
+  putCar('coupe', 2240, 1900, -Math.PI / 2);
+  putCar('truck', 960, 1560, 0);
+  putCar('hatch', 1700, 2240, 0);
+  putCar('sedan', 2560, 2240, Math.PI);
+  for (let i = 0; i < 8; i += 1) putPed(1420 + i * 52, 1476 + (i % 2) * 30);
+  for (let i = 0; i < 6; i += 1) {
+    const ped = putPed(1620 + i * 64, 1740 + (i % 2) * 44);
+    ped.state = 'flee';
+    ped.threatX = car.x;
+    ped.threatY = car.y;
+  }
+  // The wheel hangs open over the scene: the whole arsenal on show.
+  game.wheelOpen = true;
+  game.toast('Showcase — Port Solano at full heat');
+}
